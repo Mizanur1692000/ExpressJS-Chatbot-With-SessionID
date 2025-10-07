@@ -1,0 +1,100 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>BelowMSRP Chatbot - Test UI</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 800px; margin: 20px auto; }
+    #chat { border: 1px solid #ccc; padding: 10px; height: 400px; overflow:auto; background:#fafafa; }
+    .msg { margin: 8px 0; }
+    .user { text-align: right; }
+    .assistant { text-align: left; color: #111; }
+    .bubble { display:inline-block; padding:8px 12px; border-radius:12px; max-width:80%; }
+    .bubble.user { background:#007bff; color:white; }
+    .bubble.assistant { background:#eee; color:#111; }
+    #controls { margin-top:10px; display:flex; gap:8px; }
+    #message { flex:1; padding:8px; font-size:16px; }
+  </style>
+</head>
+<body>
+  <h2>BelowMSRP Chatbot — Test UI</h2>
+  <div>
+    <button id="newSessionBtn">Start New Session</button>
+    <button id="resetBtn">Reset Current Session</button>
+    <span id="sessionLabel" style="margin-left:10px;color:#666;"></span>
+  </div>
+
+  <div id="chat"></div>
+
+  <div id="controls">
+    <input id="message" placeholder="Type a message..." />
+    <button id="sendBtn">Send</button>
+  </div>
+
+  <script>
+    let sessionId = null;
+    const chatEl = document.getElementById('chat');
+    const sessionLabel = document.getElementById('sessionLabel');
+
+    async function newSession() {
+      const res = await fetch('/chat/session', { method: 'POST' });
+      const j = await res.json();
+      sessionId = j.sessionId;
+      sessionLabel.textContent = 'Session: ' + sessionId;
+      chatEl.innerHTML = '';
+    }
+
+    async function resetSession() {
+      if (!sessionId) return alert('No session to reset. Create one first.');
+      await fetch('/chat/reset', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ sessionId })
+      });
+      chatEl.innerHTML = '';
+    }
+
+    function addMessage(role, text) {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'msg ' + (role === 'user' ? 'user' : 'assistant');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble ' + (role === 'user' ? 'user' : 'assistant');
+      bubble.textContent = text;
+
+      wrapper.appendChild(bubble);
+      chatEl.appendChild(wrapper);
+      chatEl.scrollTop = chatEl.scrollHeight;
+    }
+
+    document.getElementById('newSessionBtn').addEventListener('click', newSession);
+    document.getElementById('resetBtn').addEventListener('click', async () => {
+      if (!sessionId) { alert('No session. Create one first.'); return; }
+      await resetSession();
+      addMessage('assistant', 'Session reset.');
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+      const msgInput = document.getElementById('message');
+      const text = msgInput.value.trim();
+      if (!text) return;
+      if (!sessionId) await newSession();
+
+      addMessage('user', text);
+      msgInput.value = '';
+      // Call backend
+      const res = await fetch('/chat/message', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ sessionId, message: text })
+      });
+      const j = await res.json();
+      if (j.reply) addMessage('assistant', j.reply);
+      else addMessage('assistant', 'No reply (error).');
+    });
+
+    // Auto create a session on page load
+    window.addEventListener('load', newSession);
+  </script>
+</body>
+</html>
